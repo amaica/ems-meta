@@ -47,9 +47,6 @@ flowchart LR
 | Lombok | — |
 | Gradle (wrapper) | incluído em cada serviço |
 
-**Group ID:** `com.synki`  
-**Namespace:** `com.synki.<nome_do_servico>`
-
 ---
 
 ## Pré-requisitos
@@ -110,7 +107,7 @@ Dentro da pasta de qualquer serviço:
 ems-meta/
 ├── services/
 │   ├── device-management/
-│   │   ├── src/main/java/com/synki/device_management/
+│   │   ├── src/main/java/.../
 │   │   ├── src/main/resources/application.properties
 │   │   ├── build.gradle
 │   │   └── gradlew
@@ -138,7 +135,7 @@ Abra **um terminal por serviço**. As portas já estão configuradas para não c
 ### Adicionar um novo microserviço
 
 1. Crie uma nova pasta em `services/<nome-do-servico>/`
-2. Inicialize com Spring Boot + Gradle (group `com.synki`)
+2. Inicialize com Spring Boot + Gradle
 3. Defina uma porta exclusiva em `application.properties`
 4. Atualize esta tabela no README
 
@@ -157,4 +154,4 @@ Nesta fase o monorepo reduz a complexidade operacional. Um serviço pode ser ext
 
 ## Licença
 
-Projeto interno **AlgaSensor / Synki**. Todos os direitos reservados.
+Projeto educacional de curso — **AlgaSensor**. Uso livre para fins de aprendizado.
