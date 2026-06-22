@@ -1,9 +1,0 @@
-[submodule "services/ems-temperature-processing"]
-	path = services/ems-temperature-processing
-	url = https://github.com/amaica/ems-temperature-processing.git
-[submodule "services/ems-temperature-monitoring"]
-	path = services/ems-temperature-monitoring
-	url = https://github.com/amaica/ems-temperature-monitoring.git
-[submodule "services/ems-device-management"]
-	path = services/ems-device-management
-	url = https://github.com/amaica/ems-device-management.git
