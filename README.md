@@ -1,37 +1,139 @@
 # EMS Meta
 
-> Monorepo de microserviços do **EMS** (Energy Management System) — plataforma AlgaSensor para gestão e monitoramento de dispositivos IoT.
+Monorepo dos microserviços do **EMS** (Energy Management System), baseado no projeto AlgaSensors do curso de microsserviços da AlgaWorks.
 
-[![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)](https://openjdk.org/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.4-brightgreen?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
-[![Gradle](https://img.shields.io/badge/Gradle-wrapper-02303A?logo=gradle&logoColor=white)](https://gradle.org/)
+Repositório: **https://github.com/amaica/ems-meta**
 
 ---
 
-## Sobre o projeto
+## O que tem aqui
 
-O **ems-meta** centraliza os microserviços do domínio EMS em um único repositório (**monorepo**).  
-Cada serviço em `services/` é um projeto Spring Boot independente — com build, testes e deploy próprios — mas compartilha o mesmo versionamento e histórico Git.
+Três serviços Spring Boot que trabalham juntos:
 
-### Visão geral da arquitetura
+| Serviço | O que faz | Porta |
+|---------|-----------|-------|
+| **device-management** | Cadastro e gestão de sensores | `8080` |
+| **temperatura-processing** | Recebe e processa leituras de temperatura | `8081` |
+| **temperatura-monitoring** | Monitora sensores, grava logs e dispara alertas | `8082` |
 
-```mermaid
-flowchart LR
-    subgraph ems-meta["ems-meta (monorepo)"]
-        DM["device-management\n:8080"]
-        TP["temperatura-processing\n:8081"]
-        TM["temperatura-monitoring\n:8082"]
-    end
+O **RabbitMQ** entra no meio para a comunicação assíncrona entre os serviços de temperatura.
 
-    DM -->|"dispositivos"| TP
-    TP -->|"dados processados"| TM
+---
+
+## Antes de começar
+
+Você vai precisar de:
+
+- **Java 21**
+- **Git**
+- **Podman** (ou Docker) — para subir o RabbitMQ
+
+O Gradle já vem no projeto (`./gradlew`), não precisa instalar.
+
+---
+
+## Rodar tudo de uma vez
+
+A forma mais simples é usar o script `ems.sh` na raiz do projeto:
+
+```bash
+git clone https://github.com/amaica/ems-meta.git
+cd ems-meta
+
+./ems.sh start    # sobe RabbitMQ + os 3 serviços
+./ems.sh status   # vê o que está rodando
+./ems.sh logs     # acompanha os logs
+./ems.sh stop     # para tudo
 ```
 
-| Serviço | Responsabilidade | Porta | Caminho |
-|---------|------------------|-------|---------|
-| **device-management** | Cadastro e gestão de dispositivos | `8080` | [`services/device-management`](services/device-management) |
-| **temperatura-processing** | Processamento de leituras de temperatura | `8081` | [`services/temperatura-processing`](services/temperatura-processing) |
-| **temperatura-monitoring** | Monitoramento e alertas de temperatura | `8082` | [`services/temperatura-monitoring`](services/temperatura-monitoring) |
+O script cuida do RabbitMQ e dos três microserviços. Os logs ficam em `.run/logs/`.
+
+**Dica:** use `./ems.sh` (com o `./` na frente). Se rodar com `sh ems.sh`, pode dar problema.
+
+### Portas usadas
+
+| Componente | Porta |
+|------------|-------|
+| device-management | 8080 |
+| temperatura-processing | 8081 |
+| temperatura-monitoring | 8082 |
+| RabbitMQ (AMQP) | 5673 |
+| RabbitMQ (painel web) | 15673 |
+
+O RabbitMQ usa a porta **5673** de propósito — assim não briga com outro RabbitMQ que você já tenha na 5672.
+
+Credenciais do RabbitMQ: `rabbitmq` / `rabbitmq`
+
+Painel: http://localhost:15673
+
+### Testar se funcionou
+
+```bash
+curl http://localhost:8080/api/sensors
+```
+
+Se voltar JSON (mesmo que vazio), está no ar.
+
+---
+
+## Rodar manualmente (sem o script)
+
+Se preferir subir cada coisa separado:
+
+**1. RabbitMQ**
+```bash
+podman start ems-rabbitmq
+# ou, na primeira vez, deixe o ./ems.sh start criar o container
+```
+
+**2. Um terminal para cada serviço**
+```bash
+cd services/device-management && ./gradlew bootRun
+cd services/temperatura-processing && SPRING_RABBITMQ_PORT=5673 ./gradlew bootRun
+cd services/temperatura-monitoring && SPRING_RABBITMQ_PORT=5673 ./gradlew bootRun
+```
+
+Os dois últimos precisam saber que o RabbitMQ está na porta **5673**.
+
+---
+
+## Build e testes
+
+Dentro de qualquer pasta em `services/`:
+
+```bash
+./gradlew build
+./gradlew test
+```
+
+---
+
+## Abrir no IntelliJ
+
+1. **File → Open**
+2. Selecione a pasta `ems-meta` (a raiz do projeto)
+3. O IntelliJ deve importar os três módulos Gradle em `services/`
+
+Se o IntelliJ reclamar de "dubious ownership", a pasta provavelmente está com dono errado. Corrija com:
+
+```bash
+sudo chown -R $USER:$USER /caminho/para/ems-meta
+```
+
+---
+
+## Estrutura do projeto
+
+```
+ems-meta/
+├── ems.sh                 # script para subir/parar tudo
+├── docker-compose.yml     # referência do RabbitMQ (o script usa Podman)
+├── configs/rabbitmq/      # plugins do RabbitMQ
+└── services/
+    ├── device-management/
+    ├── temperatura-processing/
+    └── temperatura-monitoring/
+```
 
 ---
 
@@ -39,119 +141,33 @@ flowchart LR
 
 | Tecnologia | Versão |
 |------------|--------|
-| Java | 17 |
-| Spring Boot | 4.0.4 |
+| Java | 21 |
+| Spring Boot | 3.4.3 |
 | Spring Data JPA | — |
-| Spring Web MVC | — |
-| H2 (dev) | — |
-| Lombok | — |
-| Gradle (wrapper) | incluído em cada serviço |
+| Spring AMQP (RabbitMQ) | — |
+| H2 (banco local) | — |
+| Gradle (wrapper) | incluído |
 
 ---
 
-## Pré-requisitos
+## Problemas comuns
 
-- [JDK 17](https://adoptium.net/) ou superior
-- Git
+**"Podman não encontrado" no terminal do IntelliJ**
 
-> Não é necessário instalar o Gradle — cada serviço inclui o wrapper (`./gradlew`).
-
----
-
-## Início rápido
-
-### 1. Clonar o repositório
+O terminal do IDE às vezes vem com PATH enxuto. Tente:
 
 ```bash
-git clone https://github.com/amaica/ems-meta.git
-cd ems-meta
+CONTAINER_CMD_OVERRIDE=/usr/bin/podman ./ems.sh start
 ```
 
-### 2. Executar um microserviço
+Ou rode o script num terminal normal do sistema.
 
-```bash
-cd services/device-management
-./gradlew bootRun
-```
+**Erro de autenticação no RabbitMQ**
 
-Repita em terminais separados para subir os demais serviços:
-
-```bash
-cd services/temperatura-processing && ./gradlew bootRun   # porta 8081
-cd services/temperatura-monitoring  && ./gradlew bootRun   # porta 8082
-```
-
-### 3. Verificar se está no ar
-
-```bash
-curl http://localhost:8080/actuator/health  # quando actuator estiver habilitado
-```
-
----
-
-## Build e testes
-
-Dentro da pasta de qualquer serviço:
-
-```bash
-./gradlew build      # compila + testes
-./gradlew test       # apenas testes
-./gradlew bootJar    # gera JAR executável em build/libs/
-```
-
----
-
-## Estrutura do repositório
-
-```
-ems-meta/
-├── services/
-│   ├── device-management/
-│   │   ├── src/main/java/.../
-│   │   ├── src/main/resources/application.properties
-│   │   ├── build.gradle
-│   │   └── gradlew
-│   ├── temperatura-processing/
-│   └── temperatura-monitoring/
-└── README.md
-```
-
-Cada microserviço segue o layout padrão Spring Boot e pode ser aberto isoladamente no IntelliJ IDEA ou VS Code.
-
----
-
-## Desenvolvimento
-
-### Rodar todos os serviços localmente
-
-Abra **um terminal por serviço**. As portas já estão configuradas para não conflitar:
-
-| Serviço | `server.port` |
-|---------|---------------|
-| device-management | `8080` |
-| temperatura-processing | `8081` |
-| temperatura-monitoring | `8082` |
-
-### Adicionar um novo microserviço
-
-1. Crie uma nova pasta em `services/<nome-do-servico>/`
-2. Inicialize com Spring Boot + Gradle
-3. Defina uma porta exclusiva em `application.properties`
-4. Atualize esta tabela no README
-
----
-
-## Por que monorepo?
-
-| Abordagem | Vantagem |
-|-----------|----------|
-| **Monorepo** *(atual)* | Mudanças coordenadas, setup simples, visão unificada do sistema |
-| **Repo por serviço** | Deploy e versionamento totalmente independentes por time |
-
-Nesta fase o monorepo reduz a complexidade operacional. Um serviço pode ser extraído para repositório próprio no futuro sem alterar sua estrutura interna.
+Provavelmente tem outro RabbitMQ rodando na porta 5672 com credenciais diferentes. O `ems.sh` já usa a 5673 para evitar isso.
 
 ---
 
 ## Licença
 
-Projeto educacional de curso — **AlgaSensor**. Uso livre para fins de aprendizado.
+Projeto educacional — uso livre para aprendizado.

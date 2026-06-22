@@ -14,6 +14,9 @@
 
 set -uo pipefail
 
+# Shells mínimos (ex.: terminal do IntelliJ) podem não incluir /usr/bin no PATH.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="$ROOT_DIR/.run"
 LOG_DIR="$RUN_DIR/logs"
@@ -25,6 +28,8 @@ RABBITMQ_AMQP_PORT="${RABBITMQ_AMQP_PORT:-5673}"
 RABBITMQ_MGMT_PORT="${RABBITMQ_MGMT_PORT:-15673}"
 RABBITMQ_USER="${RABBITMQ_USER:-rabbitmq}"
 RABBITMQ_PASS="${RABBITMQ_PASS:-rabbitmq}"
+
+CONTAINER_CMD=""
 
 SERVICES=(
   "device-management:8080:services/device-management"
@@ -42,6 +47,28 @@ error() {
 
 ensure_dirs() {
   mkdir -p "$LOG_DIR" "$PID_DIR"
+}
+
+resolve_container_cmd() {
+  local candidate
+
+  if [ -n "${CONTAINER_CMD_OVERRIDE:-}" ]; then
+    CONTAINER_CMD="$CONTAINER_CMD_OVERRIDE"
+    return 0
+  fi
+
+  for candidate in podman docker /usr/bin/podman /usr/bin/docker; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      CONTAINER_CMD="$(command -v "$candidate")"
+      return 0
+    fi
+    if [ -x "$candidate" ]; then
+      CONTAINER_CMD="$candidate"
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 port_in_use() {
@@ -88,17 +115,25 @@ kill_port() {
 }
 
 start_rabbitmq() {
-  if ! command -v podman >/dev/null 2>&1; then
-    error "Podman não encontrado. Instale o Podman ou suba o RabbitMQ manualmente."
+  if port_in_use "$RABBITMQ_AMQP_PORT"; then
+    log "RabbitMQ já está rodando na porta ${RABBITMQ_AMQP_PORT}"
+    return 0
+  fi
+
+  if ! resolve_container_cmd; then
+    error "Podman/Docker não encontrado no PATH."
+    error "Instale o Podman, adicione /usr/bin ao PATH ou defina CONTAINER_CMD_OVERRIDE=/usr/bin/podman"
     return 1
   fi
 
-  if podman container exists "$RABBITMQ_CONTAINER" >/dev/null 2>&1; then
+  log "Usando runtime de container: $CONTAINER_CMD"
+
+  if "$CONTAINER_CMD" container exists "$RABBITMQ_CONTAINER" >/dev/null 2>&1; then
     log "Iniciando container $RABBITMQ_CONTAINER..."
-    podman start "$RABBITMQ_CONTAINER" >/dev/null
+    "$CONTAINER_CMD" start "$RABBITMQ_CONTAINER" >/dev/null
   else
     log "Criando container $RABBITMQ_CONTAINER..."
-    podman run -d \
+    "$CONTAINER_CMD" run -d \
       --name "$RABBITMQ_CONTAINER" \
       -p "${RABBITMQ_AMQP_PORT}:5672" \
       -p "${RABBITMQ_MGMT_PORT}:15672" \
@@ -118,9 +153,9 @@ start_rabbitmq() {
 }
 
 stop_rabbitmq() {
-  if command -v podman >/dev/null 2>&1 && podman container exists "$RABBITMQ_CONTAINER" >/dev/null 2>&1; then
+  if resolve_container_cmd && "$CONTAINER_CMD" container exists "$RABBITMQ_CONTAINER" >/dev/null 2>&1; then
     log "Parando container $RABBITMQ_CONTAINER..."
-    podman stop "$RABBITMQ_CONTAINER" >/dev/null || true
+    "$CONTAINER_CMD" stop "$RABBITMQ_CONTAINER" >/dev/null || true
   fi
 }
 
@@ -268,6 +303,7 @@ Variáveis opcionais:
   RABBITMQ_MGMT_PORT   (padrão: 15673)
   RABBITMQ_USER        (padrão: rabbitmq)
   RABBITMQ_PASS        (padrão: rabbitmq)
+  CONTAINER_CMD_OVERRIDE  (ex.: /usr/bin/podman)
 EOF
 }
 
