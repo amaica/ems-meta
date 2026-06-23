@@ -76,6 +76,54 @@ Se voltar JSON (mesmo que vazio), está no ar.
 
 ---
 
+## Demonstração na daily
+
+Com o ambiente rodando, execute o fluxo completo de ponta a ponta:
+
+```bash
+./ems.sh start    # sobe tudo (se ainda não estiver no ar)
+./ems.sh demo     # ou: ./demo.sh
+```
+
+O script percorre automaticamente:
+
+```
+device-management          temperatura-processing         temperatura-monitoring
+      │                            │                              │
+      │  1. cadastra sensor        │                              │
+      │  2. habilita monitoramento ──────────────────────────────►│
+      │                            │                              │ 3. configura alertas
+      │                            │  4. recebe temperatura       │
+      │                            │──────── RabbitMQ ───────────►│ 5. grava logs
+      │                            │                              │ 6. registra alertas
+      │  7. consulta detalhe ◄────────────────────────────────────│
+```
+
+**O que foi implementado:** quando a temperatura ultrapassa os limites configurados, o `temperatura-monitoring` **persiste um evento de alerta** consultável via API:
+
+```bash
+GET /api/sensors/{sensorId}/alert/events
+```
+
+Exemplo de resposta:
+
+```json
+{
+  "content": [
+    {
+      "id": "...",
+      "sensorId": "...",
+      "value": 35.0,
+      "type": "MAX_EXCEEDED",
+      "registeredAt": "2026-06-17T10:30:00Z"
+    }
+  ],
+  "totalElements": 1
+}
+```
+
+---
+
 ## Rodar manualmente (sem o script)
 
 Se preferir subir cada coisa separado:
@@ -127,6 +175,7 @@ sudo chown -R $USER:$USER /caminho/para/ems-meta
 ```
 ems-meta/
 ├── ems.sh                 # script para subir/parar tudo
+├── demo.sh                # demonstração E2E para daily
 ├── docker-compose.yml     # referência do RabbitMQ (o script usa Podman)
 ├── configs/rabbitmq/      # plugins do RabbitMQ
 └── services/

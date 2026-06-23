@@ -287,6 +287,13 @@ cmd_logs() {
     "$LOG_DIR/temperatura-monitoring.log"
 }
 
+cmd_demo() {
+  if [ ! -x "$ROOT_DIR/demo.sh" ]; then
+    chmod +x "$ROOT_DIR/demo.sh"
+  fi
+  "$ROOT_DIR/demo.sh"
+}
+
 usage() {
   cat <<EOF
 Uso: $(basename "$0") <comando>
@@ -297,6 +304,7 @@ Comandos:
   restart   Reinicia tudo
   status    Mostra o status das portas
   logs      Acompanha os logs dos serviços
+  demo      Executa demonstração E2E do fluxo completo
 
 Variáveis opcionais:
   RABBITMQ_AMQP_PORT   (padrão: 5673)
@@ -316,6 +324,7 @@ main() {
     restart) cmd_restart ;;
     status) cmd_status ;;
     logs) cmd_logs ;;
+    demo) cmd_demo ;;
     *)
       usage
       exit 1
