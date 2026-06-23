@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Demonstração do fluxo completo do EMS — útil para daily/review.
+# Demonstração do fluxo completo do EMS.
 #
 # Pré-requisito: ambiente rodando (./ems.sh start)
 #
@@ -64,7 +64,7 @@ create_sensor() {
   response=$(curl -sf -X POST "$DEVICE_MGMT/api/sensors" \
     -H 'Content-Type: application/json' \
     -d '{
-      "name": "Sensor Demo Daily",
+      "name": "Sensor Demo",
       "ip": "192.168.1.100",
       "location": "Sala de aula",
       "protocol": "HTTP",
@@ -152,7 +152,7 @@ show_results() {
 }
 
 summary() {
-  step "Resumo para a daily"
+  step "Resumo"
 
   cat <<EOF
 

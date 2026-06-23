@@ -76,7 +76,7 @@ Se voltar JSON (mesmo que vazio), está no ar.
 
 ---
 
-## Demonstração na daily
+## Demonstração do fluxo completo
 
 Com o ambiente rodando, execute o fluxo completo de ponta a ponta:
 
@@ -175,7 +175,7 @@ sudo chown -R $USER:$USER /caminho/para/ems-meta
 ```
 ems-meta/
 ├── ems.sh                 # script para subir/parar tudo
-├── demo.sh                # demonstração E2E para daily
+├── demo.sh                # demonstração E2E do fluxo completo
 ├── docker-compose.yml     # referência do RabbitMQ (o script usa Podman)
 ├── configs/rabbitmq/      # plugins do RabbitMQ
 └── services/
