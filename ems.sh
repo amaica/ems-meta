@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 # Sobe e para o ambiente local do ems-meta (RabbitMQ + 3 microserviços).
 #
@@ -29,7 +29,9 @@ RABBITMQ_MGMT_PORT="${RABBITMQ_MGMT_PORT:-15673}"
 RABBITMQ_USER="${RABBITMQ_USER:-rabbitmq}"
 RABBITMQ_PASS="${RABBITMQ_PASS:-rabbitmq}"
 
-CONTAINER_CMD=""
+CONTAINER_BIN=""
+CONTAINER_VIA_FLATPAK=false
+FLATPAK_SPAWN=""
 
 SERVICES=(
   "device-management:8080:services/device-management"
@@ -49,21 +51,31 @@ ensure_dirs() {
   mkdir -p "$LOG_DIR" "$PID_DIR"
 }
 
-resolve_container_cmd() {
+load_shell_profile() {
+  local profile
+
+  for profile in "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bashrc"; do
+    if [ -f "$profile" ]; then
+      # shellcheck disable=SC1090
+      . "$profile" 2>/dev/null || true
+    fi
+  done
+}
+
+is_flatpak_sandbox() {
+  [ -n "${FLATPAK_ID:-}" ] || [ -f /.flatpak-info ]
+}
+
+find_flatpak_spawn() {
   local candidate
 
-  if [ -n "${CONTAINER_CMD_OVERRIDE:-}" ]; then
-    CONTAINER_CMD="$CONTAINER_CMD_OVERRIDE"
-    return 0
-  fi
-
-  for candidate in podman docker /usr/bin/podman /usr/bin/docker; do
+  for candidate in /usr/sbin/flatpak-spawn /usr/bin/flatpak-spawn flatpak-spawn; do
     if command -v "$candidate" >/dev/null 2>&1; then
-      CONTAINER_CMD="$(command -v "$candidate")"
+      printf '%s\n' "$(command -v "$candidate")"
       return 0
     fi
     if [ -x "$candidate" ]; then
-      CONTAINER_CMD="$candidate"
+      printf '%s\n' "$candidate"
       return 0
     fi
   done
@@ -71,9 +83,94 @@ resolve_container_cmd() {
   return 1
 }
 
+try_flatpak_host_container() {
+  local runtime="${1:-podman}"
+  local spawn
+
+  spawn="$(find_flatpak_spawn)" || return 1
+
+  if ! "$spawn" --host "$runtime" --version >/dev/null 2>&1; then
+    return 1
+  fi
+
+  FLATPAK_SPAWN="$spawn"
+  CONTAINER_BIN="$runtime"
+  CONTAINER_VIA_FLATPAK=true
+  return 0
+}
+
+run_container() {
+  if [ "$CONTAINER_VIA_FLATPAK" = true ]; then
+    "$FLATPAK_SPAWN" --host "$CONTAINER_BIN" "$@"
+  else
+    "$CONTAINER_BIN" "$@"
+  fi
+}
+
+container_runtime_label() {
+  if [ "$CONTAINER_VIA_FLATPAK" = true ]; then
+    printf 'flatpak-spawn --host %s' "$CONTAINER_BIN"
+  else
+    printf '%s' "$CONTAINER_BIN"
+  fi
+}
+
+resolve_container_cmd() {
+  local candidate
+
+  CONTAINER_BIN=""
+  CONTAINER_VIA_FLATPAK=false
+  FLATPAK_SPAWN=""
+
+  if [ -n "${CONTAINER_CMD_OVERRIDE:-}" ]; then
+    if [ -x "$CONTAINER_CMD_OVERRIDE" ]; then
+      CONTAINER_BIN="$CONTAINER_CMD_OVERRIDE"
+      return 0
+    fi
+    if is_flatpak_sandbox && try_flatpak_host_container "$(basename "$CONTAINER_CMD_OVERRIDE")"; then
+      return 0
+    fi
+    error "CONTAINER_CMD_OVERRIDE definido mas não executável: $CONTAINER_CMD_OVERRIDE"
+    return 1
+  fi
+
+  for candidate in podman docker \
+      /usr/bin/podman /usr/bin/docker \
+      /usr/local/bin/podman /usr/local/bin/docker \
+      /snap/bin/podman; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      CONTAINER_BIN="$(command -v "$candidate")"
+      return 0
+    fi
+    if [ -x "$candidate" ]; then
+      CONTAINER_BIN="$candidate"
+      return 0
+    fi
+  done
+
+  if is_flatpak_sandbox; then
+    try_flatpak_host_container podman && return 0
+    try_flatpak_host_container docker && return 0
+  fi
+
+  return 1
+}
+
 port_in_use() {
   local port="$1"
-  ss -tln 2>/dev/null | grep -q ":${port} "
+
+  if command -v ss >/dev/null 2>&1; then
+    ss -tln 2>/dev/null | grep -q ":${port} " && return 0
+  fi
+
+  if command -v nc >/dev/null 2>&1; then
+    nc -z localhost "$port" >/dev/null 2>&1 && return 0
+  fi
+
+  # Bash built-in — funciona no terminal Flatpak do IntelliJ (sem ss/nc)
+  (echo >/dev/tcp/localhost/"$port") >/dev/null 2>&1 && return 0
+
+  return 1
 }
 
 wait_for_port() {
@@ -93,9 +190,14 @@ wait_for_port() {
 
 kill_port() {
   local port="$1"
-  local pids
+  local pids=""
 
-  pids="$(ss -tlnp 2>/dev/null | grep ":${port} " | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true)"
+  if command -v ss >/dev/null 2>&1; then
+    pids="$(ss -tlnp 2>/dev/null | grep ":${port} " | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true)"
+  elif command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -ti tcp:"$port" 2>/dev/null || true)"
+  fi
+
   if [ -z "$pids" ]; then
     return 0
   fi
@@ -106,7 +208,13 @@ kill_port() {
 
   sleep 1
 
-  pids="$(ss -tlnp 2>/dev/null | grep ":${port} " | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true)"
+  pids=""
+  if command -v ss >/dev/null 2>&1; then
+    pids="$(ss -tlnp 2>/dev/null | grep ":${port} " | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true)"
+  elif command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -ti tcp:"$port" 2>/dev/null || true)"
+  fi
+
   if [ -n "$pids" ]; then
     while read -r pid; do
       [ -n "$pid" ] && kill -9 "$pid" 2>/dev/null || true
@@ -121,19 +229,32 @@ start_rabbitmq() {
   fi
 
   if ! resolve_container_cmd; then
-    error "Podman/Docker não encontrado no PATH."
-    error "Instale o Podman, adicione /usr/bin ao PATH ou defina CONTAINER_CMD_OVERRIDE=/usr/bin/podman"
+    load_shell_profile
+  fi
+
+  if ! resolve_container_cmd; then
+    error "Podman/Docker não encontrado."
+    error "PATH atual: ${PATH:-<vazio>}"
+    if is_flatpak_sandbox; then
+      error "IntelliJ via Flatpak: o sandbox não enxerga o Podman do sistema."
+      error "Configure uma vez (fora do IntelliJ):"
+      error "  flatpak override --user com.jetbrains.IntelliJ-IDEA-Community --talk-name=org.freedesktop.Flatpak"
+      error "Depois rode ./ems.sh start no terminal do IntelliJ."
+      error "Ou suba só os serviços: ./ems.sh start-services (com RabbitMQ já rodando fora do IDE)"
+    else
+      error "Tente: CONTAINER_CMD_OVERRIDE=/usr/bin/podman ./ems.sh start"
+    fi
     return 1
   fi
 
-  log "Usando runtime de container: $CONTAINER_CMD"
+  log "Usando runtime de container: $(container_runtime_label)"
 
-  if "$CONTAINER_CMD" container exists "$RABBITMQ_CONTAINER" >/dev/null 2>&1; then
+  if run_container container exists "$RABBITMQ_CONTAINER" >/dev/null 2>&1; then
     log "Iniciando container $RABBITMQ_CONTAINER..."
-    "$CONTAINER_CMD" start "$RABBITMQ_CONTAINER" >/dev/null
+    run_container start "$RABBITMQ_CONTAINER" >/dev/null
   else
     log "Criando container $RABBITMQ_CONTAINER..."
-    "$CONTAINER_CMD" run -d \
+    run_container run -d \
       --name "$RABBITMQ_CONTAINER" \
       -p "${RABBITMQ_AMQP_PORT}:5672" \
       -p "${RABBITMQ_MGMT_PORT}:15672" \
@@ -153,9 +274,9 @@ start_rabbitmq() {
 }
 
 stop_rabbitmq() {
-  if resolve_container_cmd && "$CONTAINER_CMD" container exists "$RABBITMQ_CONTAINER" >/dev/null 2>&1; then
+  if resolve_container_cmd && run_container container exists "$RABBITMQ_CONTAINER" >/dev/null 2>&1; then
     log "Parando container $RABBITMQ_CONTAINER..."
-    "$CONTAINER_CMD" stop "$RABBITMQ_CONTAINER" >/dev/null || true
+    run_container stop "$RABBITMQ_CONTAINER" >/dev/null || true
   fi
 }
 
@@ -216,6 +337,27 @@ stop_service() {
     log "Liberando porta $port de $name..."
     kill_port "$port"
   fi
+}
+
+cmd_start_services() {
+  ensure_dirs
+
+  if ! port_in_use "$RABBITMQ_AMQP_PORT"; then
+    error "RabbitMQ não está rodando na porta ${RABBITMQ_AMQP_PORT}."
+    error "Suba o RabbitMQ fora do IntelliJ: podman start ems-rabbitmq"
+    error "Ou use ./ems.sh start num terminal normal do sistema."
+    return 1
+  fi
+
+  local entry name port dir
+  for entry in "${SERVICES[@]}"; do
+    IFS=':' read -r name port dir <<< "$entry"
+    start_service "$name" "$port" "$dir" || return 1
+  done
+
+  echo
+  log "Microserviços iniciados (RabbitMQ já estava no ar)."
+  cmd_status
 }
 
 cmd_start() {
@@ -299,19 +441,20 @@ usage() {
 Uso: $(basename "$0") <comando>
 
 Comandos:
-  start     Inicia RabbitMQ e os 3 microserviços
-  stop      Para tudo
-  restart   Reinicia tudo
-  status    Mostra o status das portas
-  logs      Acompanha os logs dos serviços
-  demo      Executa demonstração E2E do fluxo completo
+  start            Inicia RabbitMQ e os 3 microserviços
+  start-services   Inicia só os microserviços (RabbitMQ já deve estar rodando)
+  stop             Para tudo
+  restart          Reinicia tudo
+  status           Mostra o status das portas
+  logs             Acompanha os logs dos serviços
+  demo             Executa demonstração E2E do fluxo completo
 
 Variáveis opcionais:
-  RABBITMQ_AMQP_PORT   (padrão: 5673)
-  RABBITMQ_MGMT_PORT   (padrão: 15673)
-  RABBITMQ_USER        (padrão: rabbitmq)
-  RABBITMQ_PASS        (padrão: rabbitmq)
-  CONTAINER_CMD_OVERRIDE  (ex.: /usr/bin/podman)
+  RABBITMQ_AMQP_PORT      (padrão: 5673)
+  RABBITMQ_MGMT_PORT      (padrão: 15673)
+  RABBITMQ_USER           (padrão: rabbitmq)
+  RABBITMQ_PASS           (padrão: rabbitmq)
+  CONTAINER_CMD_OVERRIDE  (ex.: podman — no Flatpak use só o nome, não o caminho)
 EOF
 }
 
@@ -320,6 +463,7 @@ main() {
 
   case "$cmd" in
     start) cmd_start ;;
+    start-services) cmd_start_services ;;
     stop) cmd_stop ;;
     restart) cmd_restart ;;
     status) cmd_status ;;

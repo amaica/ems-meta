@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="temperatura-monitoring" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="temperatura-monitoring.main" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.synki.temperatura_monitoring.TemperatureMonitoringApplication" />
+    <envs>
+      <env name="SPRING_RABBITMQ_PORT" value="5673" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

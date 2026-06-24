@@ -1,0 +1,154 @@
+### EMS Meta — REST Client
+### Ambiente: local (http/http-client.env.json)
+### Dica: crie um sensor primeiro (request 01) e copie o "id" para sensorId no env.
+
+@deviceHost = {{deviceHost}}
+@processingHost = {{processingHost}}
+@monitoringHost = {{monitoringHost}}
+@sensorId = {{sensorId}}
+
+###############################################################################
+# device-management :8080
+###############################################################################
+
+### 01 — Listar sensores
+GET {{deviceHost}}/api/sensors
+
+### 02 — Criar sensor
+# @name createSensor
+POST {{deviceHost}}/api/sensors
+Content-Type: application/json
+
+{
+  "name": "Sensor REST Client",
+  "ip": "192.168.1.50",
+  "location": "Laboratório",
+  "protocol": "HTTP",
+  "model": "DHT22"
+}
+
+### 03 — Buscar sensor por ID
+GET {{deviceHost}}/api/sensors/{{sensorId}}
+
+### 04 — Detalhe agregado (device-management + monitoring)
+GET {{deviceHost}}/api/sensors/{{sensorId}}/detail
+
+### 05 — Habilitar monitoramento
+PUT {{deviceHost}}/api/sensors/{{sensorId}}/enable
+
+### 06 — Desabilitar monitoramento
+DELETE {{deviceHost}}/api/sensors/{{sensorId}}/enable
+
+### 07 — Atualizar sensor
+PUT {{deviceHost}}/api/sensors/{{sensorId}}
+Content-Type: application/json
+
+{
+  "name": "Sensor REST Client (atualizado)",
+  "ip": "192.168.1.51",
+  "location": "Laboratório B",
+  "protocol": "HTTP",
+  "model": "DHT22"
+}
+
+### 08 — Excluir sensor
+DELETE {{deviceHost}}/api/sensors/{{sensorId}}
+
+###############################################################################
+# temperatura-processing :8081
+###############################################################################
+
+### 09 — Enviar leitura de temperatura (publica no RabbitMQ)
+POST {{processingHost}}/api/sensors/{{sensorId}}/temperatures/data
+Content-Type: text/plain
+
+22.5
+
+### 10 — Enviar temperatura acima do limite (dispara alerta)
+POST {{processingHost}}/api/sensors/{{sensorId}}/temperatures/data
+Content-Type: text/plain
+
+35.0
+
+###############################################################################
+# temperatura-monitoring :8082
+###############################################################################
+
+### 11 — Status do monitoramento
+GET {{monitoringHost}}/api/sensors/{{sensorId}}/monitoring
+
+### 12 — Configurar alertas (mín 15°C, máx 30°C)
+PUT {{monitoringHost}}/api/sensors/{{sensorId}}/alert
+Content-Type: application/json
+
+{
+  "minTemperature": 15.0,
+  "maxTemperature": 30.0
+}
+
+### 13 — Consultar alertas configurados
+GET {{monitoringHost}}/api/sensors/{{sensorId}}/alert
+
+### 14 — Histórico de temperaturas
+GET {{monitoringHost}}/api/sensors/{{sensorId}}/temperatures?size=10
+
+### 15 — Eventos de alerta registrados
+GET {{monitoringHost}}/api/sensors/{{sensorId}}/alert/events?size=10
+
+###############################################################################
+# Fluxo completo (rode em sequência com os 3 serviços em Debug)
+###############################################################################
+
+### FC-01 Criar sensor
+# @name fluxoCreateSensor
+POST {{deviceHost}}/api/sensors
+Content-Type: application/json
+
+{
+  "name": "Sensor Fluxo Completo",
+  "ip": "10.0.0.1",
+  "location": "Sala",
+  "protocol": "HTTP",
+  "model": "DHT22"
+}
+
+> {%
+  const id = response.body.id;
+  if (id) {
+    client.global.set("sensorId", id);
+    client.log("sensorId definido: " + id);
+  }
+%}
+
+### FC-02 Habilitar monitoramento
+PUT {{deviceHost}}/api/sensors/{{sensorId}}/enable
+
+### FC-03 Configurar alertas
+PUT {{monitoringHost}}/api/sensors/{{sensorId}}/alert
+Content-Type: application/json
+
+{
+  "minTemperature": 15.0,
+  "maxTemperature": 30.0
+}
+
+### FC-04 Enviar temperatura normal
+POST {{processingHost}}/api/sensors/{{sensorId}}/temperatures/data
+Content-Type: text/plain
+
+22.5
+
+### FC-05 Enviar temperatura com alerta
+POST {{processingHost}}/api/sensors/{{sensorId}}/temperatures/data
+Content-Type: text/plain
+
+35.0
+
+### FC-06 Ver logs de temperatura
+GET {{monitoringHost}}/api/sensors/{{sensorId}}/temperatures?size=5
+
+### FC-07 Ver eventos de alerta
+GET {{monitoringHost}}/api/sensors/{{sensorId}}/alert/events?size=5
+
+### FC-08 Detalhe agregado
+GET {{deviceHost}}/api/sensors/{{sensorId}}/detail

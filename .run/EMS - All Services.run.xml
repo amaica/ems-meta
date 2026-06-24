@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="EMS - All Services" type="CompoundRunConfigurationType">
+    <toRun name="device-management" type="SpringBootApplicationConfigurationType" />
+    <toRun name="temperatura-processing" type="SpringBootApplicationConfigurationType" />
+    <toRun name="temperatura-monitoring" type="SpringBootApplicationConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>

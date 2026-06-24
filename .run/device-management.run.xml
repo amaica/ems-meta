@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="device-management" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot">
+    <module name="device-management.main" />
+    <option name="SPRING_BOOT_MAIN_CLASS" value="com.synki.device_management.DeviceManagementApplication" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

@@ -38,4 +38,5 @@ out/
 .vscode/
 
 ### Runtime local ###
-.run/
+.run/logs/
+.run/pids/

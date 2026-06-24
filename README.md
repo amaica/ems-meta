@@ -170,12 +170,54 @@ sudo chown -R $USER:$USER /caminho/para/ems-meta
 
 ---
 
+## Debug + REST Client (vários serviços ao mesmo tempo)
+
+O projeto já vem configurado para isso.
+
+### 1. Subir o RabbitMQ
+
+```bash
+./ems.sh start
+# ou só o RabbitMQ fora do IntelliJ: podman start ems-rabbitmq
+```
+
+### 2. Debugar os 3 microserviços juntos
+
+No IntelliJ, em **Run → EMS - All Services** (ícone de Debug):
+
+- `device-management` (8080)
+- `temperatura-processing` (8081)
+- `temperatura-monitoring` (8082)
+
+As configs ficam em `.run/`. Cada serviço abre uma aba de debug — breakpoints funcionam nos 3 ao mesmo tempo.
+
+### 3. Disparar requisições com REST Client
+
+Abra `http/ems.http`, selecione o ambiente **local** (canto superior direito) e clique no ▶ ao lado de cada request.
+
+Fluxo sugerido para testar tudo:
+
+1. **FC-01** — cria sensor (salva o `sensorId` automaticamente)
+2. **FC-02** a **FC-08** — percorre o fluxo completo
+
+Para debugar o RabbitMQ, coloque breakpoints em:
+
+- `TemperatureProcessingController` (publica na fila)
+- `RabbitMQListener` no `temperatura-monitoring` (consome a fila)
+
+---
+
 ## Estrutura do projeto
 
 ```
 ems-meta/
 ├── ems.sh                 # script para subir/parar tudo
 ├── demo.sh                # demonstração E2E do fluxo completo
+├── push.sh                # git add, commit e push automático
+├── http/
+│   ├── ems.http           # REST Client — requisições para os 3 serviços
+│   └── http-client.env.json
+├── .run/                  # Run Configurations do IntelliJ (Debug compound)
 ├── docker-compose.yml     # referência do RabbitMQ (o script usa Podman)
 ├── configs/rabbitmq/      # plugins do RabbitMQ
 └── services/
@@ -201,15 +243,32 @@ ems-meta/
 
 ## Problemas comuns
 
-**"Podman não encontrado" no terminal do IntelliJ**
+**"Podman não encontrado" no terminal do IntelliJ (Flatpak)**
 
-O terminal do IDE às vezes vem com PATH enxuto. Tente:
+O IntelliJ instalado via **Flatpak** roda em sandbox (`bwrap`). O `/usr/bin/podman` **não existe** dentro do terminal do IDE — por isso `CONTAINER_CMD_OVERRIDE=/usr/bin/podman` também falha.
 
+**Solução 1 — configurar o Flatpak (uma vez, no terminal do sistema):**
 ```bash
-CONTAINER_CMD_OVERRIDE=/usr/bin/podman ./ems.sh start
+flatpak override --user com.jetbrains.IntelliJ-IDEA-Community --talk-name=org.freedesktop.Flatpak
+```
+Feche e reabra o IntelliJ. O `ems.sh` detecta o Flatpak e usa `flatpak-spawn --host podman` automaticamente.
+
+**Solução 2 — subir em duas etapas:**
+
+Terminal **fora** do IntelliJ (RabbitMQ):
+```bash
+podman start ems-rabbitmq || ./ems.sh start   # só precisa do RabbitMQ uma vez
 ```
 
-Ou rode o script num terminal normal do sistema.
+Terminal **dentro** do IntelliJ (microserviços):
+```bash
+./ems.sh start-services
+```
+
+**Solução 3 — terminal do sistema para tudo:**
+```bash
+./ems.sh start
+```
 
 **Erro de autenticação no RabbitMQ**
 
