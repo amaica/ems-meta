@@ -156,6 +156,36 @@ resolve_container_cmd() {
   return 1
 }
 
+run_on_host() {
+  local spawn
+  spawn="$(find_flatpak_spawn)"
+  "$spawn" --host bash -lc "$1"
+}
+
+uses_host_java() {
+  if is_flatpak_sandbox && ! command -v java >/dev/null 2>&1; then
+    find_flatpak_spawn >/dev/null 2>&1 && \
+      "$(find_flatpak_spawn)" --host java -version >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+resolve_java_home() {
+  if [ -n "${JAVA_HOME:-}" ] && [ ! -x "${JAVA_HOME}/bin/java" ]; then
+    unset JAVA_HOME
+  fi
+
+  if [ -z "${JAVA_HOME:-}" ]; then
+    local java_bin
+    java_bin="$(command -v java 2>/dev/null || true)"
+    if [ -n "$java_bin" ]; then
+      JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$java_bin")")")"
+      export JAVA_HOME
+    fi
+  fi
+}
+
 port_in_use() {
   local port="$1"
 
@@ -297,19 +327,46 @@ start_service() {
     chmod +x "$service_dir/gradlew"
   fi
 
-  log "Iniciando $name na porta $port..."
-  (
-    cd "$service_dir"
-    export SPRING_RABBITMQ_HOST="${SPRING_RABBITMQ_HOST:-localhost}"
-    export SPRING_RABBITMQ_PORT="${RABBITMQ_AMQP_PORT}"
-    export SPRING_RABBITMQ_USERNAME="${RABBITMQ_USER}"
-    export SPRING_RABBITMQ_PASSWORD="${RABBITMQ_PASS}"
-    nohup ./gradlew bootRun >>"$log_file" 2>&1 &
-    echo $! >"$pid_file"
-  )
+  resolve_java_home
 
-  if ! wait_for_port "$port" 90; then
+  log "Iniciando $name na porta $port..."
+  if uses_host_java; then
+    log "Usando Java do host (IntelliJ Flatpak)..."
+    run_on_host "
+      cd '$service_dir' || exit 1
+      export SPRING_RABBITMQ_HOST='${SPRING_RABBITMQ_HOST:-localhost}'
+      export SPRING_RABBITMQ_PORT='${RABBITMQ_AMQP_PORT}'
+      export SPRING_RABBITMQ_USERNAME='${RABBITMQ_USER}'
+      export SPRING_RABBITMQ_PASSWORD='${RABBITMQ_PASS}'
+      unset JAVA_HOME
+      if command -v java >/dev/null 2>&1; then
+        export JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(command -v java))))
+      fi
+      nohup ./gradlew bootRun >>'$log_file' 2>&1 &
+      echo \$! >'$pid_file'
+    " || return 1
+  else
+    (
+      cd "$service_dir"
+      export SPRING_RABBITMQ_HOST="${SPRING_RABBITMQ_HOST:-localhost}"
+      export SPRING_RABBITMQ_PORT="${RABBITMQ_AMQP_PORT}"
+      export SPRING_RABBITMQ_USERNAME="${RABBITMQ_USER}"
+      export SPRING_RABBITMQ_PASSWORD="${RABBITMQ_PASS}"
+      nohup ./gradlew bootRun >>"$log_file" 2>&1 &
+      echo $! >"$pid_file"
+    )
+  fi
+
+  if ! wait_for_port "$port" 120; then
     error "$name não subiu na porta $port. Veja: $log_file"
+    if [ -f "$log_file" ]; then
+      error "Últimas linhas do log:"
+      tail -n 8 "$log_file" >&2 || true
+    fi
+    if grep -q 'JAVA_HOME is set to an invalid directory' "$log_file" 2>/dev/null; then
+      error "JAVA_HOME inválido no terminal do IntelliJ (Flatpak)."
+      error "Rode ./ems.sh restart neste terminal após atualizar o script."
+    fi
     return 1
   fi
 
@@ -329,6 +386,9 @@ stop_service() {
       kill "$pid" 2>/dev/null || true
       sleep 2
       kill -9 "$pid" 2>/dev/null || true
+    elif find_flatpak_spawn >/dev/null 2>&1; then
+      log "Parando $name no host (pid $pid)..."
+      run_on_host "kill '$pid' 2>/dev/null || kill -9 '$pid' 2>/dev/null || true" || true
     fi
     rm -f "$pid_file"
   fi

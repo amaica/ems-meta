@@ -1,0 +1,715 @@
+{
+  "info": {
+    "_postman_id": "ems-meta-collection",
+    "name": "EMS Meta",
+    "description": "Collection do EMS Meta (AlgaSensors) — device-management, temperatura-processing e temperatura-monitoring.\n\n## Como usar\n1. Importe a collection e o environment **EMS Meta - Local**\n2. Suba o ambiente: `./ems.sh start`\n3. Rode a pasta **Fluxo Completo (E2E)** com o Collection Runner\n\nVariáveis: `deviceHost`, `processingHost`, `monitoringHost`, `sensorId`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "device-management (:8080)",
+      "item": [
+        {
+          "name": "01 - Listar sensores",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{deviceHost}}/api/sensors"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Resposta paginada', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('content');",
+                  "    pm.expect(json).to.have.property('totalElements');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Criar sensor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sensor Postman\",\n  \"ip\": \"192.168.1.50\",\n  \"location\": \"Laboratório\",\n  \"protocol\": \"HTTP\",\n  \"model\": \"DHT22\"\n}"
+            },
+            "url": "{{deviceHost}}/api/sensors"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Sensor criado com id', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.name).to.eql('Sensor Postman');",
+                  "    pm.expect(json.enabled).to.eql(false);",
+                  "    pm.collectionVariables.set('sensorId', json.id);",
+                  "    pm.environment.set('sensorId', json.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Buscar sensor por ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{deviceHost}}/api/sensors/{{sensorId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ID corresponde', () => {",
+                  "    pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('sensorId'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Detalhe agregado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{deviceHost}}/api/sensors/{{sensorId}}/detail"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Contém sensor e monitoring', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('sensor');",
+                  "    pm.expect(json).to.have.property('monitoring');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Habilitar monitoramento",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{deviceHost}}/api/sensors/{{sensorId}}/enable"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204 No Content', () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Desabilitar monitoramento",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{deviceHost}}/api/sensors/{{sensorId}}/enable"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204 No Content', () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Atualizar sensor",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sensor Postman (atualizado)\",\n  \"ip\": \"192.168.1.51\",\n  \"location\": \"Laboratório B\",\n  \"protocol\": \"HTTP\",\n  \"model\": \"DHT22\"\n}"
+            },
+            "url": "{{deviceHost}}/api/sensors/{{sensorId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Nome atualizado', () => {",
+                  "    pm.expect(pm.response.json().name).to.eql('Sensor Postman (atualizado)');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 - Excluir sensor",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{deviceHost}}/api/sensors/{{sensorId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204 No Content', () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "temperatura-processing (:8081)",
+      "item": [
+        {
+          "name": "09 - Enviar temperatura normal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "22.5"
+            },
+            "url": "{{processingHost}}/api/sensors/{{sensorId}}/temperatures/data"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 - Enviar temperatura com alerta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "35.0"
+            },
+            "url": "{{processingHost}}/api/sensors/{{sensorId}}/temperatures/data"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 - Temperatura inválida (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "abc"
+            },
+            "url": "{{processingHost}}/api/sensors/{{sensorId}}/temperatures/data"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "temperatura-monitoring (:8082)",
+      "item": [
+        {
+          "name": "12 - Status do monitoramento",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{monitoringHost}}/api/sensors/{{sensorId}}/monitoring"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Retorna enabled', () => {",
+                  "    pm.expect(pm.response.json()).to.have.property('enabled');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "13 - Configurar alertas",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"minTemperature\": 15.0,\n  \"maxTemperature\": 30.0\n}"
+            },
+            "url": "{{monitoringHost}}/api/sensors/{{sensorId}}/alert"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Limites configurados', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.minTemperature).to.eql(15);",
+                  "    pm.expect(json.maxTemperature).to.eql(30);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "14 - Consultar alertas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{monitoringHost}}/api/sensors/{{sensorId}}/alert"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "15 - Histórico de temperaturas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{monitoringHost}}/api/sensors/{{sensorId}}/temperatures?size=10",
+              "host": ["{{monitoringHost}}"],
+              "path": ["api", "sensors", "{{sensorId}}", "temperatures"],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Resposta paginada', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('content');",
+                  "    pm.expect(json).to.have.property('totalElements');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "16 - Eventos de alerta",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{monitoringHost}}/api/sensors/{{sensorId}}/alert/events?size=10",
+              "host": ["{{monitoringHost}}"],
+              "path": ["api", "sensors", "{{sensorId}}", "alert", "events"],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Resposta paginada', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('content');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Fluxo Completo (E2E)",
+      "item": [
+        {
+          "name": "FC-01 - Criar sensor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sensor Fluxo E2E\",\n  \"ip\": \"10.0.0.1\",\n  \"location\": \"Sala\",\n  \"protocol\": \"HTTP\",\n  \"model\": \"DHT22\"\n}"
+            },
+            "url": "{{deviceHost}}/api/sensors"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('sensorId', json.id);",
+                  "pm.environment.set('sensorId', json.id);",
+                  "console.log('sensorId:', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "FC-02 - Habilitar monitoramento",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": "{{deviceHost}}/api/sensors/{{sensorId}}/enable"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "FC-03 - Configurar alertas",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"minTemperature\": 15.0,\n  \"maxTemperature\": 30.0\n}"
+            },
+            "url": "{{monitoringHost}}/api/sensors/{{sensorId}}/alert"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "FC-04 - Enviar temperatura normal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "22.5"
+            },
+            "url": "{{processingHost}}/api/sensors/{{sensorId}}/temperatures/data"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "FC-05 - Aguardar processamento RabbitMQ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{monitoringHost}}/api/sensors/{{sensorId}}/monitoring"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const delay = 3000;",
+                  "const start = Date.now();",
+                  "while (Date.now() - start < delay) { /* aguarda RabbitMQ */ }"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "FC-06 - Enviar temperatura com alerta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "35.0"
+            },
+            "url": "{{processingHost}}/api/sensors/{{sensorId}}/temperatures/data"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "FC-07 - Aguardar alerta",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{monitoringHost}}/api/sensors/{{sensorId}}/alert/events?size=5"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const delay = 8000;",
+                  "const start = Date.now();",
+                  "while (Date.now() - start < delay) { /* aguarda fila de alertas */ }"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Pelo menos 1 evento de alerta', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.totalElements).to.be.at.least(1);",
+                  "    const event = json.content[0];",
+                  "    pm.expect(event.type).to.eql('MAX_EXCEEDED');",
+                  "    pm.expect(event.value).to.eql(35);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "FC-08 - Verificar logs de temperatura",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{monitoringHost}}/api/sensors/{{sensorId}}/temperatures?size=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Pelo menos 2 leituras', () => {",
+                  "    pm.expect(pm.response.json().totalElements).to.be.at.least(2);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "FC-09 - Detalhe agregado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{deviceHost}}/api/sensors/{{sensorId}}/detail"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sensor habilitado e com temperatura', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.sensor.enabled).to.eql(true);",
+                  "    pm.expect(json.monitoring.lastTemperature).to.eql(35);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "deviceHost",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "processingHost",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "monitoringHost",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "sensorId",
+      "value": ""
+    }
+  ]
+}

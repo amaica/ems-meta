@@ -205,6 +205,15 @@ Para debugar o RabbitMQ, coloque breakpoints em:
 - `TemperatureProcessingController` (publica na fila)
 - `RabbitMQListener` no `temperatura-monitoring` (consome a fila)
 
+### 4. Postman
+
+Importe os arquivos em `postman/`:
+
+1. **EMS-Meta.postman_collection.json**
+2. **EMS-Meta-Local.postman_environment.json**
+
+Selecione o environment **EMS Meta - Local**, suba o ambiente (`./ems.sh start`) e rode a pasta **Fluxo Completo (E2E)** no Collection Runner.
+
 ---
 
 ## Estrutura do projeto
@@ -217,6 +226,9 @@ ems-meta/
 ├── http/
 │   ├── ems.http           # REST Client — requisições para os 3 serviços
 │   └── http-client.env.json
+├── postman/
+│   ├── EMS-Meta.postman_collection.json
+│   └── EMS-Meta-Local.postman_environment.json
 ├── .run/                  # Run Configurations do IntelliJ (Debug compound)
 ├── docker-compose.yml     # referência do RabbitMQ (o script usa Podman)
 ├── configs/rabbitmq/      # plugins do RabbitMQ
@@ -242,6 +254,20 @@ ems-meta/
 ---
 
 ## Problemas comuns
+
+**temperatura-monitoring não subiu / JAVA_HOME inválido**
+
+No IntelliJ Flatpak, `JAVA_HOME` aponta para `/usr/lib/jvm/...` que **não existe dentro do sandbox**. O `gradlew` falha com:
+
+```
+ERROR: JAVA_HOME is set to an invalid directory
+```
+
+O `ems.sh` já corrige isso automaticamente (usa Java do host via `flatpak-spawn`). Rode:
+
+```bash
+./ems.sh restart
+```
 
 **"Podman não encontrado" no terminal do IntelliJ (Flatpak)**
 
